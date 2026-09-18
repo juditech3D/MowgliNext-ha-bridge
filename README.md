@@ -79,11 +79,45 @@ immediately after a restart instead of waiting for the next robot message.
 
 ## Install
 
+One line, on the robot's Pi:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/juditech3D/MowgliNext-ha-bridge/main/install.sh | sudo bash
+```
+
+Or clone it first, if you would rather read the script before running it as
+root — which is the sensible habit:
+
 ```bash
 git clone https://github.com/juditech3D/MowgliNext-ha-bridge.git
 cd MowgliNext-ha-bridge
 sudo ./install.sh
 ```
+
+<details>
+<summary>Why the one-liner needs a trick</summary>
+
+When bash reads a script from a pipe, stdin *is* the script. A plain `read`
+would swallow the rest of the installer instead of waiting for an answer, and
+every prompt would come back empty. So when the installer notices it has no
+file of its own, it downloads itself to a temporary file and re-executes from
+there — bash then reads the script from that file and stdin is free to be your
+terminal. The temporary copy is removed on exit.
+
+</details>
+
+### Unattended install
+
+Any answer already present in the environment is used as-is, so nothing is
+asked:
+
+```bash
+sudo MQTT_HOST=192.168.1.10 MQTT_USERNAME=mowgli MQTT_PASSWORD='…' ./install.sh
+```
+
+Handy for provisioning several robots. Note that a password written on a
+command line lands in your shell history — for a one-off install, let the
+script ask for it instead.
 
 The installer asks for the robot address, the broker address and port, and the
 **MQTT username and password**. The password is typed hidden and written only

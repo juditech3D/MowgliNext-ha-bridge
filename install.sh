@@ -20,7 +20,37 @@ BIN_PATH="/usr/local/bin/${SERVICE_NAME}"
 CONF_PATH="/etc/${SERVICE_NAME}.conf"
 UNIT_PATH="/etc/systemd/system/${SERVICE_NAME}.service"
 SRC_NAME="mowglinext_ha_bridge.py"
-RAW_URL="https://raw.githubusercontent.com/juditech3D/MowgliNext-ha-bridge/main/${SRC_NAME}"
+REPO_RAW="https://raw.githubusercontent.com/juditech3D/MowgliNext-ha-bridge/main"
+RAW_URL="${REPO_RAW}/${SRC_NAME}"
+SELF_URL="${REPO_RAW}/install.sh"
+
+# ---------------------------------------------------------------------------
+# One-line install support
+#
+#   curl -fsSL .../install.sh | sudo bash
+#
+# When bash reads a script from a pipe, stdin *is* the script — so `read` would
+# swallow the rest of the installer instead of waiting for an answer, and the
+# prompts below would never work. Re-run ourselves from a real file: bash then
+# reads the script from that file and leaves stdin pointing at the terminal.
+# ---------------------------------------------------------------------------
+if [[ ! -f "${BASH_SOURCE[0]:-}" ]]; then
+  if ! command -v curl >/dev/null; then
+    echo "curl is required for the one-line install." >&2
+    exit 1
+  fi
+  _self="$(mktemp)"
+  curl -fsSL "$SELF_URL" -o "$_self" || { echo "Could not download the installer." >&2; exit 1; }
+  chmod +x "$_self"
+  exec env _MHB_SELF_TMP="$_self" bash "$_self" "$@"
+fi
+
+# Second pass of a one-line install: tidy the copy we downloaded of ourselves.
+# Written as an `if` on purpose: under `set -e`, a bare `[[ … ]] && …` whose
+# test fails returns non-zero and would abort the installer.
+if [[ -n "${_MHB_SELF_TMP:-}" ]]; then
+  trap 'rm -f "$_MHB_SELF_TMP"' EXIT
+fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
@@ -58,6 +88,13 @@ say "${c_dim}It does not change anything on the robot itself.${c_off}"
 # ---------------------------------------------------------------------------
 ask() {  # ask <variable> <prompt> <default>
   local __var="$1" __prompt="$2" __default="${3:-}" __reply
+  # Already provided in the environment? Take it and move on. This is what
+  # makes an unattended install possible:
+  #   sudo MQTT_HOST=… MQTT_USERNAME=… MQTT_PASSWORD=… ./install.sh
+  if [[ -n "${!__var:-}" ]]; then
+    printf '%s: %s %s(from environment)%s\n' "$__prompt" "${!__var}" "$c_dim" "$c_off"
+    return
+  fi
   if [[ -n "$__default" ]]; then
     read -r -p "$__prompt [$__default]: " __reply || true
     __reply="${__reply:-$__default}"
@@ -81,11 +118,15 @@ ask MQTT_HOST "  Broker address" ""
 ask MQTT_PORT "  Broker port" "1883"
 ask MQTT_USERNAME "  MQTT username" ""
 
-MQTT_PASSWORD=""
-while [[ -z "$MQTT_PASSWORD" ]]; do
-  read -r -s -p "  MQTT password (hidden): " MQTT_PASSWORD || true
-  echo
-done
+if [[ -n "${MQTT_PASSWORD:-}" ]]; then
+  say "  MQTT password: ${c_dim}(from environment)${c_off}"
+else
+  MQTT_PASSWORD=""
+  while [[ -z "$MQTT_PASSWORD" ]]; do
+    read -r -s -p "  MQTT password (hidden): " MQTT_PASSWORD || true
+    echo
+  done
+fi
 
 head_ "3. Topics"
 ask TOPIC_PREFIX "  Topic prefix" "mowgli"
