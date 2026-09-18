@@ -282,7 +282,13 @@ POST /api/mowglinext/call/high_level_control   {"command": <n>}
 | `start` / `resume` | start or resume mowing | `COMMAND_START=1` |
 | `pause` / `stop` | stop in place: motion halted, mower off, stays put | `COMMAND_STOP=8` |
 | `dock` / `home` / `return_to_base` | drive back to the dock | `COMMAND_HOME=2` |
-| `reset_emergency` | clear a latched emergency — **opt-in** | `COMMAND_RESET_EMERGENCY=254` |
+| `reset_emergency` | clear a latched emergency — **opt-in** | `POST …/call/emergency {"emergency": 0}` |
+
+Clearing an emergency goes through the dedicated `EmergencyStop` service, not
+`high_level_control`. `COMMAND_RESET_EMERGENCY=254` is declared in
+`HighLevelControl.srv`, but the robot answers `{}` to it and nothing happens —
+its own web UI calls `mowerAction("emergency", {Emergency: 0})`, so this does
+the same.
 
 A bare word or `{"command": "dock"}` both work. Anything unrecognised is
 refused and named, never guessed at — this topic drives a machine with a blade.

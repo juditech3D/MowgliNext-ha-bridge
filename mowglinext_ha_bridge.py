@@ -80,7 +80,7 @@ DEFAULTS = {
 CMD_START = 1
 CMD_HOME = 2
 CMD_STOP = 8
-CMD_RESET_EMERGENCY = 254
+CMD_RESET_EMERGENCY = 254  # documented, but the robot answers {} to it
 
 # What a payload on <prefix>/command may say.
 COMMANDS = {
@@ -91,9 +91,14 @@ COMMANDS = {
     "dock": ("high_level_control", {"command": CMD_HOME}, False),
     "home": ("high_level_control", {"command": CMD_HOME}, False),
     "return_to_base": ("high_level_control", {"command": CMD_HOME}, False),
+    # Clearing a latched emergency goes through the dedicated EmergencyStop
+    # service, not high_level_control. COMMAND_RESET_EMERGENCY=254 exists in
+    # HighLevelControl.srv but the robot answers {} to it -- its own web UI
+    # calls mowerAction("emergency", {Emergency: 0}) instead
+    # (gui/web/src/components/MowerStatus.tsx:99), so this does the same.
     # The bool marks a command as gated behind ALLOW_EMERGENCY_RESET.
-    "reset_emergency": ("high_level_control", {"command": CMD_RESET_EMERGENCY}, True),
-    "clear_emergency": ("high_level_control", {"command": CMD_RESET_EMERGENCY}, True),
+    "reset_emergency": ("emergency", {"emergency": 0}, True),
+    "clear_emergency": ("emergency", {"emergency": 0}, True),
 }
 
 # ROS topic on the robot -> MQTT topic suffix. The robot names them in
@@ -471,11 +476,12 @@ def handle_command(cfg, topic, message, publish):
     try:
         response = call_robot(cfg, endpoint, body)
     except Exception as exc:
-        reply(False, f"robot refused the call: {exc}")
+        reply(False, f"call to {endpoint} failed: {exc}")
         return
 
     ok = bool(response.get("success", False))
-    reply(ok, "accepted by the robot" if ok else f"robot returned {response}")
+    reply(ok, "accepted by the robot" if ok
+              else f"{endpoint}{body} returned {response}")
 
 
 def clear_retained(cfg):

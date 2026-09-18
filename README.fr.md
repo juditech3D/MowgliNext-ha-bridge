@@ -284,7 +284,13 @@ POST /api/mowglinext/call/high_level_control   {"command": <n>}
 | `start` / `resume` | démarrer ou reprendre la tonte | `COMMAND_START=1` |
 | `pause` / `stop` | arrêt sur place : mouvement stoppé, lame coupée, ne bouge plus | `COMMAND_STOP=8` |
 | `dock` / `home` / `return_to_base` | retour à la base | `COMMAND_HOME=2` |
-| `reset_emergency` | acquitter une urgence verrouillée — **en option** | `COMMAND_RESET_EMERGENCY=254` |
+| `reset_emergency` | acquitter une urgence verrouillée — **en option** | `POST …/call/emergency {"emergency": 0}` |
+
+L'acquittement passe par le service dédié `EmergencyStop`, pas par
+`high_level_control`. `COMMAND_RESET_EMERGENCY=254` est bien déclaré dans
+`HighLevelControl.srv`, mais le robot y répond `{}` et rien ne se produit —
+sa propre interface appelle `mowerAction("emergency", {Emergency: 0})`, donc
+le pont fait pareil.
 
 Un mot simple ou `{"command": "dock"}` fonctionnent tous les deux. Tout ce qui
 n'est pas reconnu est refusé et nommé, jamais deviné — ce topic pilote une
