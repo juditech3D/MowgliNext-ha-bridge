@@ -94,15 +94,39 @@ cd MowgliNext-ha-bridge
 sudo ./install.sh
 ```
 
-<details>
-<summary>Why the one-liner needs a trick</summary>
+The installer asks for your language first, English or French. `--lang en` or
+`--lang fr` skips the question.
 
-When bash reads a script from a pipe, stdin *is* the script. A plain `read`
-would swallow the rest of the installer instead of waiting for an answer, and
-every prompt would come back empty. So when the installer notices it has no
-file of its own, it downloads itself to a temporary file and re-executes from
-there — bash then reads the script from that file and stdin is free to be your
-terminal. The temporary copy is removed on exit.
+<details>
+<summary>Why the one-liner needs a trick — two of them, in fact</summary>
+
+Piping a script into bash breaks interactive prompts twice over, and fixing
+only the first half produces a subtly broken install rather than an obvious
+failure.
+
+**First**, bash reads the script from stdin, so a `read` would consume the
+script itself. The installer notices it has no file of its own, downloads
+itself to a temporary file and re-executes from there.
+
+**Second — and this is the one that bites** — after re-executing, stdin is
+*still the pipe*, and the pipe still holds the rest of the downloaded script
+that bash had not yet consumed. `read` hands those leftover bytes back as if
+you had typed them. The result is an installer that asks nothing and writes a
+configuration full of its own source code:
+
+```
+ROBOT_PORT=# Second pass of a one-line install: tidy the copy we downloaded…
+MQTT_HOST=# Written as an `if` on purpose: under `set -e`, a bare `[[ … ]]`…
+TOPIC_PREFIX=fi
+```
+
+So the re-exec also points stdin at `/dev/tty`. With no terminal available it
+falls back to `/dev/null`, and answers must come from the environment.
+
+Belt and braces: every answer is now validated before anything is written.
+A port that is not a number, or an address that is not an address, stops the
+installer with a clear message instead of surfacing as a stack trace in the
+service log an hour later.
 
 </details>
 
