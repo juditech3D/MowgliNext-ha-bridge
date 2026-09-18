@@ -39,6 +39,7 @@ import struct
 import sys
 import threading
 import time
+import urllib.error
 import urllib.request
 
 LOG_LOCK = threading.Lock()
@@ -430,8 +431,20 @@ def call_robot(cfg, endpoint, body, timeout=12):
     data = json.dumps(body).encode("utf-8")
     req = urllib.request.Request(url, data=data, method="POST",
                                  headers={"Content-Type": "application/json"})
-    with urllib.request.urlopen(req, timeout=timeout) as response:
-        raw = response.read().decode("utf-8", "replace")
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as response:
+            raw = response.read().decode("utf-8", "replace")
+    except urllib.error.HTTPError as exc:
+        # The robot reports refusals as 4xx with {"error": "..."} -- that body
+        # is the whole reason the call failed, so it must not be swallowed.
+        raw = exc.read().decode("utf-8", "replace")
+        try:
+            parsed = json.loads(raw)
+        except Exception:
+            parsed = {"error": raw.strip() or f"HTTP {exc.code}"}
+        if "error" not in parsed:
+            parsed["error"] = f"HTTP {exc.code}"
+        return parsed
     try:
         return json.loads(raw)
     except Exception:
@@ -479,9 +492,19 @@ def handle_command(cfg, topic, message, publish):
         reply(False, f"call to {endpoint} failed: {exc}")
         return
 
-    ok = bool(response.get("success", False))
+    # An accepted call is HTTP 2xx with an empty body. OkResponse.Ok is a
+    # string tagged json:"ok,omitempty" (gui/pkg/api/types.go:3), so success
+    # serialises to {}. Refusals come back as 4xx with {"error": ...}, and a
+    # few routes forward the ROS service response, which does carry "success".
+    # Treating a missing "success" as failure made working commands look dead.
+    if "error" in response:
+        ok = False
+    elif "success" in response:
+        ok = bool(response["success"])
+    else:
+        ok = True
     reply(ok, "accepted by the robot" if ok
-              else f"{endpoint}{body} returned {response}")
+              else f"{endpoint} {body} -> {response}")
 
 
 def clear_retained(cfg):
