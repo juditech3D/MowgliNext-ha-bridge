@@ -80,8 +80,8 @@ immediately after a restart instead of waiting for the next robot message.
 ## Install
 
 ```bash
-git clone https://github.com/__OWNER__/__REPO__.git
-cd __REPO__
+git clone https://github.com/juditech3D/MowgliNext-ha-bridge.git
+cd MowgliNext-ha-bridge
 sudo ./install.sh
 ```
 

@@ -20,7 +20,7 @@ BIN_PATH="/usr/local/bin/${SERVICE_NAME}"
 CONF_PATH="/etc/${SERVICE_NAME}.conf"
 UNIT_PATH="/etc/systemd/system/${SERVICE_NAME}.service"
 SRC_NAME="mowglinext_ha_bridge.py"
-RAW_URL="https://raw.githubusercontent.com/__OWNER__/__REPO__/main/${SRC_NAME}"
+RAW_URL="https://raw.githubusercontent.com/juditech3D/MowgliNext-ha-bridge/main/${SRC_NAME}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
@@ -131,7 +131,7 @@ ok "Wrote ${CONF_PATH} (mode 0600, root only)"
 cat > "$UNIT_PATH" <<EOF
 [Unit]
 Description=MowgliNext to MQTT bridge for Home Assistant
-Documentation=https://github.com/__OWNER__/__REPO__
+Documentation=https://github.com/juditech3D/MowgliNext-ha-bridge
 After=network-online.target
 Wants=network-online.target
 
