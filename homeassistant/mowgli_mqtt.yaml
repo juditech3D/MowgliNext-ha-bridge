@@ -70,10 +70,17 @@ mqtt:
       icon: mdi:progress-check
       device: *mowgli_device
 
+    # Upstream unit bug: gps_quality is a 0.0-1.0 ratio (bt_context.hpp:384)
+    # copied verbatim into a field named _percent (status_snapshot.cpp:50), so a
+    # perfect RTK fix reports 1 and looks like 1%. The repo's own tests expect
+    # 0-100, so this will likely be fixed upstream one day -- hence the guard
+    # rather than a blind x100, which would then read 9860%.
     - name: "Qualite GPS"
       unique_id: mowgli_gps_quality
       state_topic: "mowgli/high_level_status"
-      value_template: "{{ value_json.gps_quality_percent | round(0) }}"
+      value_template: >-
+        {% set q = value_json.gps_quality_percent | float(0) %}
+        {{ (q * 100) | round(0) if q <= 1 else q | round(0) }}
       unit_of_measurement: "%"
       icon: mdi:satellite-variant
       device: *mowgli_device
