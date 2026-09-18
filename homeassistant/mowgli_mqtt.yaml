@@ -1,0 +1,198 @@
+# ---------------------------------------------------------------------------
+# MowgliNext -> Home Assistant (entites MQTT manuelles)
+#
+# A placer dans configuration.yaml, ou mieux : dans un package
+#   config/packages/mowgli_mqtt.yaml   (avec  homeassistant: packages: !include_dir_named packages)
+#
+# Prerequis : l'integration MQTT de HA est deja connectee au broker Mosquitto
+# et la passerelle MQTT du robot publie sur le prefixe "mowgli".
+#
+# STATUT : champs verifies en direct sur le robot.
+# v2 : noms d'entites corriges (ils repetaient le nom du device, ce qui
+#      produisait sensor.mowgli_mowgli_batterie au lieu de sensor.mowgli_batterie).
+#          Les payloads MQTT eux-memes restent a confirmer une fois la
+#          passerelle activee — voir mowgli_command.yaml pour les boutons.
+# ---------------------------------------------------------------------------
+
+mqtt:
+  sensor:
+    # --- Etat general -----------------------------------------------------
+    - name: "Etat"
+      unique_id: mowgli_state
+      state_topic: "mowgli/high_level_status"
+      value_template: "{{ value_json.state_name }}"
+      icon: mdi:robot-mower
+      device: &mowgli_device
+        identifiers: ["mowgli_next"]
+        name: "Mowgli"
+        manufacturer: "MowgliNext"
+        model: "YardForce500B"
+
+    - name: "Batterie"
+      unique_id: mowgli_battery
+      state_topic: "mowgli/high_level_status"
+      value_template: "{{ value_json.battery_percent | round(0) }}"
+      unit_of_measurement: "%"
+      device_class: battery
+      state_class: measurement
+      device: *mowgli_device
+
+    - name: "Tension batterie"
+      unique_id: mowgli_v_battery
+      state_topic: "mowgli/power"
+      value_template: "{{ value_json.v_battery | round(2) }}"
+      unit_of_measurement: "V"
+      device_class: voltage
+      state_class: measurement
+      device: *mowgli_device
+
+    - name: "Courant de charge"
+      unique_id: mowgli_charge_current
+      state_topic: "mowgli/power"
+      value_template: "{{ value_json.charge_current | round(2) }}"
+      unit_of_measurement: "A"
+      device_class: current
+      state_class: measurement
+      device: *mowgli_device
+
+    - name: "Chargeur"
+      unique_id: mowgli_charger_status
+      state_topic: "mowgli/power"
+      value_template: "{{ value_json.charger_status }}"
+      icon: mdi:ev-station
+      device: *mowgli_device
+
+    - name: "Couverture"
+      unique_id: mowgli_coverage
+      state_topic: "mowgli/high_level_status"
+      value_template: "{{ value_json.coverage_percent | round(0) }}"
+      unit_of_measurement: "%"
+      icon: mdi:progress-check
+      device: *mowgli_device
+
+    - name: "Qualite GPS"
+      unique_id: mowgli_gps_quality
+      state_topic: "mowgli/high_level_status"
+      value_template: "{{ value_json.gps_quality_percent | round(0) }}"
+      unit_of_measurement: "%"
+      icon: mdi:satellite-variant
+      device: *mowgli_device
+
+    # --- Lame / ESC -------------------------------------------------------
+    - name: "Regime lame"
+      unique_id: mowgli_blade_rpm
+      state_topic: "mowgli/status"
+      value_template: "{{ value_json.mower_motor_rpm }}"
+      unit_of_measurement: "rpm"
+      state_class: measurement
+      icon: mdi:fan
+      device: *mowgli_device
+
+    - name: "Courant lame"
+      unique_id: mowgli_blade_current
+      state_topic: "mowgli/status"
+      value_template: "{{ value_json.mower_esc_current | round(2) }}"
+      unit_of_measurement: "A"
+      device_class: current
+      state_class: measurement
+      device: *mowgli_device
+
+    - name: "Temperature moteur lame"
+      unique_id: mowgli_blade_motor_temp
+      state_topic: "mowgli/status"
+      value_template: "{{ value_json.mower_motor_temperature | round(1) }}"
+      unit_of_measurement: "°C"
+      device_class: temperature
+      state_class: measurement
+      device: *mowgli_device
+
+    # mower_status = 255 (0xFF) -> l'ESC ne repond pas. Capteur dedie pour
+    # pouvoir declencher une alerte sur la panne de lame constatee.
+    - name: "Code ESC lame"
+      unique_id: mowgli_blade_esc_code
+      state_topic: "mowgli/status"
+      value_template: "{{ value_json.mower_status }}"
+      icon: mdi:chip
+      device: *mowgli_device
+
+    - name: "Firmware"
+      unique_id: mowgli_firmware
+      state_topic: "mowgli/status"
+      value_template: "{{ value_json.firmware_version }}"
+      entity_category: diagnostic
+      icon: mdi:memory
+      device: *mowgli_device
+
+    - name: "Cause du dernier reset"
+      unique_id: mowgli_reset_cause
+      state_topic: "mowgli/status"
+      value_template: "{{ value_json.reset_cause_name }}"
+      entity_category: diagnostic
+      icon: mdi:restart-alert
+      device: *mowgli_device
+
+    - name: "Motif urgence"
+      unique_id: mowgli_emergency_reason
+      state_topic: "mowgli/emergency"
+      value_template: "{{ value_json.reason if value_json.reason else 'aucun' }}"
+      icon: mdi:alert-circle-outline
+      device: *mowgli_device
+
+  binary_sensor:
+    - name: "Arret d'urgence"
+      unique_id: mowgli_emergency
+      state_topic: "mowgli/emergency"
+      value_template: "{{ value_json.active_emergency }}"
+      payload_on: "True"
+      payload_off: "False"
+      device_class: problem
+      device: *mowgli_device
+
+    - name: "Verrou firmware"
+      unique_id: mowgli_latched
+      state_topic: "mowgli/emergency"
+      value_template: "{{ value_json.latched_emergency }}"
+      payload_on: "True"
+      payload_off: "False"
+      device_class: problem
+      entity_category: diagnostic
+      device: *mowgli_device
+
+    - name: "En charge"
+      unique_id: mowgli_charging
+      state_topic: "mowgli/high_level_status"
+      value_template: "{{ value_json.is_charging }}"
+      payload_on: "True"
+      payload_off: "False"
+      device_class: battery_charging
+      device: *mowgli_device
+
+    - name: "Pluie"
+      unique_id: mowgli_rain
+      state_topic: "mowgli/status"
+      value_template: "{{ value_json.rain_detected }}"
+      payload_on: "True"
+      payload_off: "False"
+      device_class: moisture
+      device: *mowgli_device
+
+    - name: "Tonte active"
+      unique_id: mowgli_mow_enabled
+      state_topic: "mowgli/status"
+      value_template: "{{ value_json.mow_enabled }}"
+      payload_on: "True"
+      payload_off: "False"
+      icon: mdi:blade
+      device: *mowgli_device
+
+    # Lame reellement en rotation : la commande est active ET l'ESC tourne.
+    # C'est exactement l'ecart qui revele ta panne actuelle.
+    - name: "Lame en rotation"
+      unique_id: mowgli_blade_spinning
+      state_topic: "mowgli/status"
+      value_template: >-
+        {{ value_json.mow_enabled and value_json.mower_motor_rpm | int(0) > 0 }}
+      payload_on: "True"
+      payload_off: "False"
+      icon: mdi:fan
+      device: *mowgli_device

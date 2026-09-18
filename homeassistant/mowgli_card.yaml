@@ -1,0 +1,118 @@
+# ---------------------------------------------------------------------------
+# Carte Lovelace MowgliNext
+# Tableau de bord -> Modifier -> (3 points) -> Modifier en YAML -> coller
+# sous "cards:".
+#
+# Aucune ressource HACS requise : uniquement des cartes natives.
+#
+# v2 : les entity_id portent le prefixe double (mowgli_mowgli_) tel que
+#      Home Assistant les a enregistres au premier demarrage. Un entity_id
+#      est fige a la creation : le renommer se fait dans
+#      Parametres > Appareils et services > Entites.
+# ---------------------------------------------------------------------------
+type: vertical-stack
+cards:
+  - type: heading
+    heading: Mowgli
+    heading_style: title
+    icon: mdi:robot-mower
+    badges:
+      - type: entity
+        entity: sensor.mowgli_mowgli_etat
+      - type: entity
+        entity: sensor.mowgli_mowgli_batterie
+
+  # --- Bandeau d'alerte : ne s'affiche qu'en cas de probleme ---------------
+  - type: conditional
+    conditions:
+      - condition: state
+        entity: binary_sensor.mowgli_mowgli_arret_d_urgence
+        state: "on"
+    card:
+      type: markdown
+      content: >-
+        ## ⛔ Arrêt d'urgence actif
+
+        Motif : **{{ states('sensor.mowgli_mowgli_motif_urgence') }}**
+
+  - type: conditional
+    conditions:
+      - condition: state
+        entity: binary_sensor.mowgli_mowgli_tonte_active
+        state: "on"
+      - condition: state
+        entity: binary_sensor.mowgli_mowgli_lame_en_rotation
+        state: "off"
+    card:
+      type: markdown
+      content: >-
+        ## ⚠️ Lame commandée mais à l'arrêt
+
+        Code ESC : **{{ states('sensor.mowgli_mowgli_code_esc_lame') }}**
+        (255 = aucune réponse de l'ESC) · Courant :
+        **{{ states('sensor.mowgli_mowgli_courant_lame') }} A**
+
+  # --- Etat general -------------------------------------------------------
+  - type: glance
+    show_name: true
+    show_state: true
+    columns: 4
+    entities:
+      - entity: sensor.mowgli_mowgli_batterie
+        name: Batterie
+      - entity: sensor.mowgli_mowgli_tension_batterie
+        name: Tension
+      - entity: sensor.mowgli_mowgli_qualite_gps
+        name: GPS
+      - entity: sensor.mowgli_mowgli_couverture
+        name: Couverture
+
+  - type: entities
+    title: Lame
+    entities:
+      - entity: binary_sensor.mowgli_mowgli_tonte_active
+        name: Commande de tonte
+      - entity: binary_sensor.mowgli_mowgli_lame_en_rotation
+        name: Rotation réelle
+      - entity: sensor.mowgli_mowgli_regime_lame
+        name: Régime
+      - entity: sensor.mowgli_mowgli_courant_lame
+        name: Courant
+      - entity: sensor.mowgli_mowgli_temperature_moteur_lame
+        name: Température moteur
+      - entity: sensor.mowgli_mowgli_code_esc_lame
+        name: Code ESC
+
+  - type: entities
+    title: Alimentation et sécurité
+    entities:
+      - entity: binary_sensor.mowgli_mowgli_en_charge
+        name: En charge
+      - entity: sensor.mowgli_mowgli_courant_de_charge
+        name: Courant de charge
+      - entity: sensor.mowgli_mowgli_chargeur
+        name: Chargeur
+      - entity: binary_sensor.mowgli_mowgli_arret_d_urgence
+        name: Arrêt d'urgence
+      - entity: binary_sensor.mowgli_mowgli_verrou_firmware
+        name: Verrou firmware
+      - entity: binary_sensor.mowgli_mowgli_pluie
+        name: Pluie
+
+  - type: history-graph
+    title: Batterie et lame (24 h)
+    hours_to_show: 24
+    entities:
+      - entity: sensor.mowgli_mowgli_batterie
+      - entity: sensor.mowgli_mowgli_regime_lame
+      - entity: binary_sensor.mowgli_mowgli_tonte_active
+
+  - type: entities
+    title: Diagnostic
+    entities:
+      - entity: sensor.mowgli_mowgli_firmware
+        name: Firmware
+      - entity: sensor.mowgli_mowgli_cause_du_dernier_reset
+        name: Dernier reset
+      - entity: sensor.mowgli_mowgli_motif_urgence
+        name: Motif urgence
