@@ -1,0 +1,6 @@
+# Ces fichiers sont executes sous Linux : des fins de ligne CRLF rendraient
+# le shebang invalide ("bad interpreter"). On force LF quel que soit l'OS.
+*.sh   text eol=lf
+*.py   text eol=lf
+*.yaml text eol=lf
+*.md   text eol=lf
