@@ -11,7 +11,7 @@
 # both the robot and the broker):
 #
 #     sudo ./install.sh
-#     sudo ./install.sh --uninstall
+#     sudo ./install.sh --update | --reinstall | --uninstall | --purge
 #
 set -euo pipefail
 
@@ -60,26 +60,146 @@ ok()   { printf '%s✓%s %s\n' "$c_green" "$c_off" "$*"; }
 err()  { printf '%s✗%s %s\n' "$c_red" "$c_off" "$*" >&2; }
 head_() { printf '\n%s%s%s\n' "$c_bold" "$*" "$c_off"; }
 
+usage() {
+  say "Usage: $0 [--update | --reinstall | --uninstall | --purge]"
+  say ""
+  say "  (no option)   install, or ask what to do if already installed"
+  say "  --update      replace the program, keep the configuration"
+  say "  --reinstall   ask every question again"
+  say "  --uninstall   remove the service, ask about the configuration"
+  say "  --purge       remove the service and the configuration"
+  say ""
+  say "Any answer already set in the environment is used without asking:"
+  say "  sudo MQTT_HOST=… MQTT_USERNAME=… MQTT_PASSWORD=… $0"
+}
+
+# Help before the root check — asking what a script does should not need sudo.
+for arg in "$@"; do
+  case "$arg" in
+    -h|--help) usage; exit 0 ;;
+  esac
+done
+
 # ---------------------------------------------------------------------------
 if [[ $EUID -ne 0 ]]; then
   err "Run me with sudo: sudo $0"
   exit 1
 fi
 
-if [[ "${1:-}" == "--uninstall" ]]; then
+# ---------------------------------------------------------------------------
+# Uninstall
+# ---------------------------------------------------------------------------
+do_uninstall() {  # do_uninstall <purge: yes|no|ask>
+  local purge="${1:-ask}"
   head_ "Removing ${SERVICE_NAME}"
+
+  # Stop first. Clearing the retained topics while the bridge is still running
+  # would achieve nothing: it republishes them within the second.
   systemctl disable --now "${SERVICE_NAME}.service" 2>/dev/null || true
+  ok "Service stopped and disabled."
+
+  # Retained MQTT messages outlive the client that sent them. Left alone, Home
+  # Assistant would keep displaying the last battery level for ever, with no
+  # hint that it is frozen. Clear them while the program and the credentials
+  # are both still here.
+  if [[ -f "$CONF_PATH" && -x "$BIN_PATH" ]]; then
+    say "Clearing retained MQTT topics..."
+    if "$BIN_PATH" "$CONF_PATH" --clear-retained 2>&1 | sed 's/^/  /'; then
+      ok "Broker cleaned."
+    else
+      say "${c_dim}Could not reach the broker — retained topics may remain.${c_off}"
+      say "${c_dim}Harmless, but Home Assistant will show stale values until cleared.${c_off}"
+    fi
+  fi
+
   rm -f "$UNIT_PATH" "$BIN_PATH"
   systemctl daemon-reload
-  ok "Service and binary removed."
-  say "${c_dim}${CONF_PATH} was left in place (it holds your broker password).${c_off}"
-  say "Delete it with: sudo rm ${CONF_PATH}"
+  ok "Service unit and program removed."
+
+  if [[ "$purge" == "ask" ]]; then
+    local reply=""
+    read -r -p "Also delete ${CONF_PATH} (it holds your broker password)? [y/N]: " reply || true
+    [[ "$reply" =~ ^[YyOo] ]] && purge="yes" || purge="no"
+  fi
+
+  if [[ "$purge" == "yes" ]]; then
+    rm -f "$CONF_PATH"
+    ok "Configuration deleted."
+  else
+    say "${c_dim}${CONF_PATH} kept — delete it with: sudo rm ${CONF_PATH}${c_off}"
+  fi
+
+  head_ "Done"
+  say "Nothing of this tool is left running. The robot was never modified,"
+  say "so it is unaffected."
+  say ""
+  say "${c_dim}In Home Assistant, remove the mqtt: block you added to${c_off}"
+  say "${c_dim}configuration.yaml and the dashboard card, then restart.${c_off}"
   exit 0
+}
+
+# ---------------------------------------------------------------------------
+# What are we being asked to do?
+# ---------------------------------------------------------------------------
+ACTION=""
+PURGE="ask"
+for arg in "$@"; do
+  case "$arg" in
+    --uninstall|--remove) ACTION="uninstall" ;;
+    --purge)              ACTION="uninstall"; PURGE="yes" ;;
+    --update|--upgrade)   ACTION="update" ;;
+    --reinstall)          ACTION="reinstall" ;;
+    -h|--help)            ;;  # already handled above, before the root check
+    *) err "Unknown option: $arg  (try --help)"; exit 1 ;;
+  esac
+done
+
+if [[ "$ACTION" == "uninstall" ]]; then
+  do_uninstall "$PURGE"
 fi
 
 command -v python3 >/dev/null || { err "python3 is required but not installed."; exit 1; }
 
-head_ "mowglinext-ha-bridge — installation"
+# ---------------------------------------------------------------------------
+# Already installed? Offer the sensible choices rather than silently redoing it.
+# ---------------------------------------------------------------------------
+INSTALLED="no"
+if [[ -f "$UNIT_PATH" || -x "$BIN_PATH" || -f "$CONF_PATH" ]]; then
+  INSTALLED="yes"
+fi
+
+if [[ "$INSTALLED" == "yes" && -z "$ACTION" ]]; then
+  head_ "${SERVICE_NAME} is already installed"
+  if [[ -x "$BIN_PATH"  ]]; then say "  program  ${BIN_PATH}"; fi
+  if [[ -f "$CONF_PATH" ]]; then say "  config   ${CONF_PATH}"; fi
+  if [[ -f "$UNIT_PATH" ]]; then
+    say "  service  $(systemctl is-active "${SERVICE_NAME}.service" 2>/dev/null || echo inactive)"
+  fi
+  say ""
+  say "  ${c_bold}1${c_off}) Update      — new program, keep the current settings"
+  say "  ${c_bold}2${c_off}) Reconfigure — ask every question again"
+  say "  ${c_bold}3${c_off}) Uninstall   — remove it"
+  say "  ${c_bold}4${c_off}) Cancel"
+  say ""
+  choice=""
+  while [[ ! "$choice" =~ ^[1-4]$ ]]; do
+    read -r -p "Your choice [1]: " choice || true
+    choice="${choice:-1}"
+  done
+  case "$choice" in
+    1) ACTION="update" ;;
+    2) ACTION="reinstall" ;;
+    3) do_uninstall "ask" ;;
+    4) say "Nothing done."; exit 0 ;;
+  esac
+fi
+
+if [[ "$ACTION" == "update" && ! -f "$CONF_PATH" ]]; then
+  err "Nothing to update: ${CONF_PATH} does not exist. Run without --update."
+  exit 1
+fi
+
+head_ "mowglinext-ha-bridge — $( [[ "$ACTION" == "update" ]] && echo update || echo installation )"
 say "This publishes your robot's state to MQTT so Home Assistant can read it."
 say "${c_dim}It does not change anything on the robot itself.${c_off}"
 
@@ -106,6 +226,11 @@ ask() {  # ask <variable> <prompt> <default>
   printf -v "$__var" '%s' "$__reply"
 }
 
+if [[ "$ACTION" == "update" ]]; then
+  say ""
+  say "Keeping the current settings in ${CONF_PATH}."
+  say "${c_dim}Use --reinstall to answer the questions again.${c_off}"
+else
 head_ "1. The robot"
 say "${c_dim}If you are installing on the robot's own Pi, keep 127.0.0.1.${c_off}"
 ask ROBOT_HOST "  Robot address" "127.0.0.1"
@@ -131,6 +256,7 @@ fi
 head_ "3. Topics"
 ask TOPIC_PREFIX "  Topic prefix" "mowgli"
 ask MIN_PUBLISH_INTERVAL "  Minimum seconds between updates" "2.0"
+fi
 
 # ---------------------------------------------------------------------------
 # Fetch the bridge if it is not sitting next to this script
@@ -148,6 +274,9 @@ else
   exit 1
 fi
 
+if [[ "$ACTION" == "update" ]]; then
+  ok "Configuration left untouched"
+else
 umask 077
 cat > "$CONF_PATH" <<EOF
 # mowglinext-ha-bridge configuration — written by install.sh
@@ -168,6 +297,7 @@ EOF
 chown root:root "$CONF_PATH"
 chmod 0600 "$CONF_PATH"
 ok "Wrote ${CONF_PATH} (mode 0600, root only)"
+fi
 
 cat > "$UNIT_PATH" <<EOF
 [Unit]
@@ -219,6 +349,7 @@ head_ "Next steps"
 say "  Follow the log :  sudo journalctl -u ${SERVICE_NAME} -f"
 say "  Restart        :  sudo systemctl restart ${SERVICE_NAME}"
 say "  Reconfigure    :  sudo nano ${CONF_PATH} && sudo systemctl restart ${SERVICE_NAME}"
+say "  Update         :  sudo $0 --update"
 say "  Uninstall      :  sudo $0 --uninstall"
 say ""
 say "In Home Assistant, add the entities from homeassistant/mowgli_mqtt.yaml"

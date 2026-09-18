@@ -341,9 +341,43 @@ def topic_worker(ros_topic, mqtt_suffix, cfg, state):
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
+def clear_retained(cfg):
+    """Wipe our retained topics, so nothing of ours outlives an uninstall.
+
+    A retained message survives the client that published it: without this,
+    Home Assistant would keep showing the last known battery level forever,
+    with no way to tell it is stale. Publishing an empty payload with the
+    retain flag is how MQTT deletes one.
+    """
+    prefix = cfg["TOPIC_PREFIX"]
+    client = MqttClient(cfg["MQTT_HOST"], cfg["MQTT_PORT"], cfg["MQTT_CLIENT_ID"] + "-clear",
+                        cfg["MQTT_USERNAME"], cfg["MQTT_PASSWORD"], f"{prefix}/available")
+    client.connect()
+    topics = [f"{prefix}/{suffix}" for suffix in TOPIC_MAP.values()]
+    topics.append(f"{prefix}/available")
+    for topic in topics:
+        client.publish(topic, "", retain=True)
+        log("INFO", f"cleared retained {topic}")
+    time.sleep(1)  # let the broker apply them before we drop the socket
+    client.close()  # clean DISCONNECT, so the last will is not fired
+    log("INFO", f"{len(topics)} retained topics cleared")
+
+
 def main():
-    config_path = sys.argv[1] if len(sys.argv) > 1 else "/etc/mowglinext-ha-bridge.conf"
+    args = sys.argv[1:]
+    do_clear = "--clear-retained" in args
+    positional = [a for a in args if not a.startswith("-")]
+    config_path = positional[0] if positional else "/etc/mowglinext-ha-bridge.conf"
     cfg = load_config(config_path)
+
+    if do_clear:
+        try:
+            clear_retained(cfg)
+        except Exception as exc:
+            log("ERROR", f"could not clear retained topics: {exc}")
+            return 1
+        return 0
+
     availability = f"{cfg['TOPIC_PREFIX']}/available"
 
     state = {"stop": threading.Event(), "client": None, "publish": None}
@@ -420,4 +454,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main() or 0)

@@ -154,13 +154,59 @@ Two of the entities are worth knowing about:
 - **Blade ESC code** surfaces `mower_status`. `255` means the ESC is not
   answering at all.
 
-## Managing the service
+## Update, reconfigure, uninstall
+
+There is only one script. Run it again on a machine that already has the bridge
+and it tells you what it found, then asks:
+
+```
+mowglinext-ha-bridge is already installed
+  program  /usr/local/bin/mowglinext-ha-bridge
+  config   /etc/mowglinext-ha-bridge.conf
+  service  active
+
+  1) Update      — new program, keep the current settings
+  2) Reconfigure — ask every question again
+  3) Uninstall   — remove it
+  4) Cancel
+```
+
+The same choices are available as flags, for scripts and for the one-liner:
+
+```bash
+sudo ./install.sh --update       # new program, settings untouched
+sudo ./install.sh --reinstall    # ask every question again
+sudo ./install.sh --uninstall    # remove, ask about the config file
+sudo ./install.sh --purge        # remove, config file included
+sudo ./install.sh --help
+```
+
+### Removing everything in one line
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/juditech3D/MowgliNext-ha-bridge/main/install.sh | sudo bash -s -- --purge
+```
+
+Uninstalling does three things, in this order:
+
+1. **stops and disables the service** — it has to go first, or the next step
+   would be undone within the second;
+2. **clears the retained MQTT topics.** A retained message outlives the client
+   that published it: without this, Home Assistant would keep showing your last
+   known battery level for ever, with nothing to indicate it is frozen;
+3. **removes the unit and the program**, then asks before deleting the config
+   file, since that is where your broker password lives.
+
+The robot is never touched, so nothing has to be undone there. On the Home
+Assistant side, remove the `mqtt:` block from `configuration.yaml` and the
+dashboard card, then restart.
+
+## Day to day
 
 ```bash
 sudo journalctl -u mowglinext-ha-bridge -f        # follow the log
 sudo systemctl restart mowglinext-ha-bridge       # restart
-sudo nano /etc/mowglinext-ha-bridge.conf          # reconfigure, then restart
-sudo ./install.sh --uninstall                     # remove (keeps the config file)
+sudo nano /etc/mowglinext-ha-bridge.conf          # edit settings by hand
 ```
 
 ## Configuration reference
