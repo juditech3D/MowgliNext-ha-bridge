@@ -18,7 +18,7 @@ mqtt:
   sensor:
     # --- Etat general -----------------------------------------------------
     - name: "Etat"
-      unique_id: mowgli_state
+      unique_id: mowglinext_state
       state_topic: "mowgli/high_level_status"
       value_template: "{{ value_json.state_name }}"
       icon: mdi:robot-mower
@@ -29,7 +29,7 @@ mqtt:
         model: "YardForce500B"
 
     - name: "Batterie"
-      unique_id: mowgli_battery
+      unique_id: mowglinext_battery
       state_topic: "mowgli/high_level_status"
       value_template: "{{ value_json.battery_percent | round(0) }}"
       unit_of_measurement: "%"
@@ -38,7 +38,7 @@ mqtt:
       device: *mowgli_device
 
     - name: "Tension batterie"
-      unique_id: mowgli_v_battery
+      unique_id: mowglinext_v_battery
       state_topic: "mowgli/power"
       value_template: "{{ value_json.v_battery | round(2) }}"
       unit_of_measurement: "V"
@@ -47,7 +47,7 @@ mqtt:
       device: *mowgli_device
 
     - name: "Courant de charge"
-      unique_id: mowgli_charge_current
+      unique_id: mowglinext_charge_current
       state_topic: "mowgli/power"
       value_template: "{{ value_json.charge_current | round(2) }}"
       unit_of_measurement: "A"
@@ -56,14 +56,14 @@ mqtt:
       device: *mowgli_device
 
     - name: "Chargeur"
-      unique_id: mowgli_charger_status
+      unique_id: mowglinext_charger_status
       state_topic: "mowgli/power"
       value_template: "{{ value_json.charger_status }}"
       icon: mdi:ev-station
       device: *mowgli_device
 
     - name: "Couverture"
-      unique_id: mowgli_coverage
+      unique_id: mowglinext_coverage
       state_topic: "mowgli/high_level_status"
       value_template: "{{ value_json.coverage_percent | round(0) }}"
       unit_of_measurement: "%"
@@ -76,7 +76,7 @@ mqtt:
     # 0-100, so this will likely be fixed upstream one day -- hence the guard
     # rather than a blind x100, which would then read 9860%.
     - name: "Qualite GPS"
-      unique_id: mowgli_gps_quality
+      unique_id: mowglinext_gps_quality
       state_topic: "mowgli/high_level_status"
       value_template: >-
         {% set q = value_json.gps_quality_percent | float(0) %}
@@ -87,7 +87,7 @@ mqtt:
 
     # --- Lame / ESC -------------------------------------------------------
     - name: "Regime lame"
-      unique_id: mowgli_blade_rpm
+      unique_id: mowglinext_blade_rpm
       state_topic: "mowgli/status"
       value_template: "{{ value_json.mower_motor_rpm }}"
       unit_of_measurement: "rpm"
@@ -96,7 +96,7 @@ mqtt:
       device: *mowgli_device
 
     - name: "Courant lame"
-      unique_id: mowgli_blade_current
+      unique_id: mowglinext_blade_current
       state_topic: "mowgli/status"
       value_template: "{{ value_json.mower_esc_current | round(2) }}"
       unit_of_measurement: "A"
@@ -105,7 +105,7 @@ mqtt:
       device: *mowgli_device
 
     - name: "Temperature moteur lame"
-      unique_id: mowgli_blade_motor_temp
+      unique_id: mowglinext_blade_motor_temp
       state_topic: "mowgli/status"
       value_template: "{{ value_json.mower_motor_temperature | round(1) }}"
       unit_of_measurement: "°C"
@@ -116,14 +116,14 @@ mqtt:
     # mower_status = 255 (0xFF) -> l'ESC ne repond pas. Capteur dedie pour
     # pouvoir declencher une alerte sur la panne de lame constatee.
     - name: "Code ESC lame"
-      unique_id: mowgli_blade_esc_code
+      unique_id: mowglinext_blade_esc_code
       state_topic: "mowgli/status"
       value_template: "{{ value_json.mower_status }}"
       icon: mdi:chip
       device: *mowgli_device
 
     - name: "Firmware"
-      unique_id: mowgli_firmware
+      unique_id: mowglinext_firmware
       state_topic: "mowgli/status"
       value_template: "{{ value_json.firmware_version }}"
       entity_category: diagnostic
@@ -131,7 +131,7 @@ mqtt:
       device: *mowgli_device
 
     - name: "Cause du dernier reset"
-      unique_id: mowgli_reset_cause
+      unique_id: mowglinext_reset_cause
       state_topic: "mowgli/status"
       value_template: "{{ value_json.reset_cause_name }}"
       entity_category: diagnostic
@@ -139,15 +139,74 @@ mqtt:
       device: *mowgli_device
 
     - name: "Motif urgence"
-      unique_id: mowgli_emergency_reason
+      unique_id: mowglinext_emergency_reason
       state_topic: "mowgli/emergency"
       value_template: "{{ value_json.reason if value_json.reason else 'aucun' }}"
       icon: mdi:alert-circle-outline
       device: *mowgli_device
 
+    - name: "Derniere commande"
+      unique_id: mowglinext_last_command
+      state_topic: "mowgli/command/result"
+      value_template: >-
+        {{ value_json.command }} :
+        {{ 'acceptee' if value_json.ok else 'refusee' }}
+      json_attributes_topic: "mowgli/command/result"
+      icon: mdi:history
+      entity_category: diagnostic
+      device: *mowgli_device
+
+    # --- GPS / RTK ---------------------------------------------------------
+    # rtk_mode enum, from mowgli_interfaces/msg/GnssStatus.msg:
+    #   0 UNKNOWN   1 NONE   2 FLOAT   3 FIXED
+    - name: "Mode RTK"
+      unique_id: mowglinext_rtk_mode
+      state_topic: "mowgli/gps"
+      value_template: >-
+        {% set m = value_json.rtk_mode | int(0) %}
+        {{ {0: 'Inconnu', 1: 'Aucun', 2: 'RTK flottant', 3: 'RTK fixe'}.get(m, m) }}
+      icon: mdi:crosshairs-gps
+      device: *mowgli_device
+
+    - name: "Base de corrections"
+      unique_id: mowglinext_correction_source
+      state_topic: "mowgli/gps"
+      value_template: >-
+        {{ value_json.correction_source if value_json.correction_source else 'aucune' }}
+      icon: mdi:radio-tower
+      device: *mowgli_device
+
+    - name: "Precision horizontale"
+      unique_id: mowglinext_h_accuracy
+      state_topic: "mowgli/gps"
+      value_template: "{{ (value_json.horizontal_accuracy_m | float(0) * 100) | round(1) }}"
+      unit_of_measurement: "cm"
+      state_class: measurement
+      icon: mdi:target
+      device: *mowgli_device
+
+    - name: "Satellites"
+      unique_id: mowglinext_satellites
+      state_topic: "mowgli/gps"
+      value_template: "{{ value_json.satellites_used | int(0) }}"
+      state_class: measurement
+      icon: mdi:satellite-variant
+      device: *mowgli_device
+
+    - name: "Age des corrections"
+      unique_id: mowglinext_correction_age
+      state_topic: "mowgli/gps"
+      value_template: >-
+        {{ value_json.correction_age_s | float(0) | round(1)
+           if value_json.correction_age_s is not none else 'unknown' }}
+      unit_of_measurement: "s"
+      icon: mdi:timer-outline
+      entity_category: diagnostic
+      device: *mowgli_device
+
   binary_sensor:
     - name: "Arret d'urgence"
-      unique_id: mowgli_emergency
+      unique_id: mowglinext_emergency
       state_topic: "mowgli/emergency"
       value_template: "{{ value_json.active_emergency }}"
       payload_on: "True"
@@ -156,7 +215,7 @@ mqtt:
       device: *mowgli_device
 
     - name: "Verrou firmware"
-      unique_id: mowgli_latched
+      unique_id: mowglinext_latched
       state_topic: "mowgli/emergency"
       value_template: "{{ value_json.latched_emergency }}"
       payload_on: "True"
@@ -166,7 +225,7 @@ mqtt:
       device: *mowgli_device
 
     - name: "En charge"
-      unique_id: mowgli_charging
+      unique_id: mowglinext_charging
       state_topic: "mowgli/high_level_status"
       value_template: "{{ value_json.is_charging }}"
       payload_on: "True"
@@ -175,7 +234,7 @@ mqtt:
       device: *mowgli_device
 
     - name: "Pluie"
-      unique_id: mowgli_rain
+      unique_id: mowglinext_rain
       state_topic: "mowgli/status"
       value_template: "{{ value_json.rain_detected }}"
       payload_on: "True"
@@ -184,7 +243,7 @@ mqtt:
       device: *mowgli_device
 
     - name: "Tonte active"
-      unique_id: mowgli_mow_enabled
+      unique_id: mowglinext_mow_enabled
       state_topic: "mowgli/status"
       value_template: "{{ value_json.mow_enabled }}"
       payload_on: "True"
@@ -195,7 +254,7 @@ mqtt:
     # Lame reellement en rotation : la commande est active ET l'ESC tourne.
     # C'est exactement l'ecart qui revele ta panne actuelle.
     - name: "Lame en rotation"
-      unique_id: mowgli_blade_spinning
+      unique_id: mowglinext_blade_spinning
       state_topic: "mowgli/status"
       value_template: >-
         {{ value_json.mow_enabled and value_json.mower_motor_rpm | int(0) > 0 }}
@@ -203,3 +262,49 @@ mqtt:
       payload_off: "False"
       icon: mdi:fan
       device: *mowgli_device
+
+    - name: "Corrections RTK actives"
+      unique_id: mowglinext_corrections_active
+      state_topic: "mowgli/gps"
+      value_template: "{{ value_json.corrections_active }}"
+      payload_on: "True"
+      payload_off: "False"
+      device_class: connectivity
+      device: *mowgli_device
+
+  # --- Commandes -----------------------------------------------------------
+  # These publish to mowgli/command, which the bridge turns into a call on the
+  # robot's own service API. They only do anything if ALLOW_COMMANDS is on.
+  button:
+    - name: "Demarrer"
+      unique_id: mowglinext_cmd_start
+      command_topic: "mowgli/command"
+      payload_press: "start"
+      icon: mdi:play
+      device: *mowgli_device
+
+    - name: "Pause"
+      unique_id: mowglinext_cmd_pause
+      command_topic: "mowgli/command"
+      payload_press: "pause"
+      icon: mdi:pause
+      device: *mowgli_device
+
+    - name: "Retour base"
+      unique_id: mowglinext_cmd_dock
+      command_topic: "mowgli/command"
+      payload_press: "dock"
+      icon: mdi:home-import-outline
+      device: *mowgli_device
+
+    # Only works if you set ALLOW_EMERGENCY_RESET=true on the bridge. Left in
+    # place either way: the bridge answers on mowgli/command/result, so a
+    # refusal is visible rather than silent.
+    - name: "Acquitter l'urgence"
+      unique_id: mowglinext_cmd_reset_emergency
+      command_topic: "mowgli/command"
+      payload_press: "reset_emergency"
+      icon: mdi:lock-reset
+      entity_category: config
+      device: *mowgli_device
+

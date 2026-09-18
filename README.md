@@ -63,6 +63,8 @@ retained JSON on your broker. The robot is only ever read from.
 | `mowgli/emergency` | ROS `emergency` | active/latched e-stop, reason, lift warning |
 | `mowgli/high_level_status` | ROS `highLevelStatus` | state name, battery %, coverage, GPS quality |
 | `mowgli/gps` | ROS `gnssStatus` | fix type, RTK corrections, accuracy |
+| `mowgli/command` | you | start / pause / dock (subscribed) |
+| `mowgli/command/result` | the bridge | outcome of the last command |
 | `mowgli/available` | the bridge | `online` / `offline` (MQTT last will) |
 
 All state topics are published **retained**, so Home Assistant has values
@@ -132,19 +134,6 @@ service log an hour later.
 
 </details>
 
-### Unattended install
-
-Any answer already present in the environment is used as-is, so nothing is
-asked:
-
-```bash
-sudo MQTT_HOST=192.168.1.10 MQTT_USERNAME=mowgli MQTT_PASSWORD='…' ./install.sh
-```
-
-Handy for provisioning several robots. Note that a password written on a
-command line lands in your shell history — for a one-off install, let the
-script ask for it instead.
-
 The installer asks for the robot address, the broker address and port, and the
 **MQTT username and password**. The password is typed hidden and written only
 to `/etc/mowglinext-ha-bridge.conf`, `chmod 0600`, root-owned. It is never echoed
@@ -163,6 +152,19 @@ Looking for a Home Assistant MQTT broker...
 
 Then it installs a systemd service, starts it and shows the first log lines.
 The service runs unprivileged — see [Security](#security).
+
+### Unattended install
+
+Any answer already present in the environment is used as-is, so nothing is
+asked:
+
+```bash
+sudo MQTT_HOST=192.168.1.10 MQTT_USERNAME=mowgli MQTT_PASSWORD='…' ./install.sh
+```
+
+Handy for provisioning several robots. Note that a password written on a
+command line lands in your shell history — for a one-off install, let the
+script ask for it instead.
 
 ### Creating the MQTT account in Home Assistant
 
@@ -265,6 +267,51 @@ Two of the entities are worth knowing about:
   and nowhere else.
 - **Blade ESC code** surfaces `mower_status`. `255` means the ESC is not
   answering at all.
+
+## Commands
+
+The bridge also listens on `mowgli/command` and turns a payload into a call on
+the robot's own service API — the same one its web UI uses:
+
+```
+POST /api/mowglinext/call/high_level_control   {"command": <n>}
+```
+
+| Payload | Effect | Code |
+|---|---|---|
+| `start` / `resume` | start or resume mowing | `COMMAND_START=1` |
+| `pause` / `stop` | stop in place: motion halted, mower off, stays put | `COMMAND_STOP=8` |
+| `dock` / `home` / `return_to_base` | drive back to the dock | `COMMAND_HOME=2` |
+| `reset_emergency` | clear a latched emergency — **opt-in** | `COMMAND_RESET_EMERGENCY=254` |
+
+A bare word or `{"command": "dock"}` both work. Anything unrecognised is
+refused and named, never guessed at — this topic drives a machine with a blade.
+
+Every command is answered on `mowgli/command/result`:
+
+```json
+{"command":"dock","ok":true,"detail":"accepted by the robot","ts":1789767690}
+```
+
+so a refusal is visible in Home Assistant rather than only in the service log.
+
+### Clearing an emergency is off by default
+
+`ALLOW_EMERGENCY_RESET=false` unless you answered yes during installation.
+
+The reasoning: your broker accepts any client holding the account, so exposing
+the emergency latch on MQTT lets anything on your network — a mistaken
+automation, a test script, a compromised device — release a safety interlock on
+a machine with a blade. That latch is set because something went wrong: the
+robot was lifted or tilted. Deciding it is safe again belongs next to the
+machine.
+
+Start, pause and dock carry no such weight: the worst case is a robot that goes
+home.
+
+The button is shipped in the dashboard card either way. With the option off the
+bridge refuses it and says so on `mowgli/command/result`.
+
 
 ## Update, reconfigure, uninstall
 

@@ -64,6 +64,8 @@ retenu sur votre broker. Le robot n'est jamais que lu.
 | `mowgli/emergency` | ROS `emergency` | arrêt d'urgence actif et verrouillé, motif, alerte de levage |
 | `mowgli/high_level_status` | ROS `highLevelStatus` | nom d'état, batterie %, couverture, qualité GPS |
 | `mowgli/gps` | ROS `gnssStatus` | type de fix, corrections RTK, précision |
+| `mowgli/command` | vous | démarrer / pause / base (abonnement) |
+| `mowgli/command/result` | le pont | résultat de la dernière commande |
 | `mowgli/available` | le pont | `online` / `offline` (dernière volonté MQTT) |
 
 Tous les topics d'état sont publiés **retenus**, pour que Home Assistant ait des
@@ -267,6 +269,51 @@ Deux entités méritent l'attention :
   nulle part ailleurs.
 - **Code ESC lame** expose `mower_status`. `255` signifie que l'ESC ne répond
   pas du tout.
+
+## Commandes
+
+Le pont écoute aussi `mowgli/command` et traduit la charge utile en appel sur
+l'API de services du robot — celle qu'utilise sa propre interface web :
+
+```
+POST /api/mowglinext/call/high_level_control   {"command": <n>}
+```
+
+| Charge utile | Effet | Code |
+|---|---|---|
+| `start` / `resume` | démarrer ou reprendre la tonte | `COMMAND_START=1` |
+| `pause` / `stop` | arrêt sur place : mouvement stoppé, lame coupée, ne bouge plus | `COMMAND_STOP=8` |
+| `dock` / `home` / `return_to_base` | retour à la base | `COMMAND_HOME=2` |
+| `reset_emergency` | acquitter une urgence verrouillée — **en option** | `COMMAND_RESET_EMERGENCY=254` |
+
+Un mot simple ou `{"command": "dock"}` fonctionnent tous les deux. Tout ce qui
+n'est pas reconnu est refusé et nommé, jamais deviné — ce topic pilote une
+machine à lame.
+
+Chaque commande reçoit une réponse sur `mowgli/command/result` :
+
+```json
+{"command":"dock","ok":true,"detail":"accepted by the robot","ts":1789767690}
+```
+
+Un refus est donc visible dans Home Assistant, pas seulement dans le journal.
+
+### L'acquittement d'urgence est désactivé par défaut
+
+`ALLOW_EMERGENCY_RESET=false`, sauf si vous avez répondu oui à l'installation.
+
+Le raisonnement : votre broker accepte n'importe quel client disposant du
+compte. Exposer le verrou d'urgence sur MQTT permet donc à n'importe quoi sur
+votre réseau — une automatisation mal écrite, un script de test, un appareil
+compromis — de lever un dispositif de sécurité sur une machine à lame. Ce
+verrou s'est enclenché parce que quelque chose a mal tourné : le robot a été
+soulevé ou penché. Juger que c'est de nouveau sûr se fait à côté de la machine.
+
+Démarrer, pause et retour base n'ont pas ce poids : au pire, le robot rentre.
+
+Le bouton est présent dans la carte dans tous les cas. Option désactivée, le
+pont refuse et l'explique sur `mowgli/command/result`.
+
 
 ## Mettre à jour, reconfigurer, désinstaller
 

@@ -91,7 +91,13 @@ lang_en() {
   T[q_mqtt_port]="  Broker port"
   T[q_mqtt_user]="  MQTT username"
   T[q_mqtt_pass]="  MQTT password (hidden): "
-  T[sec_topics]="3. Topics"
+  T[sec_cmd]="3. Commands"
+  T[hint_cmd1]="Start, pause and return-to-base can be driven from Home Assistant."
+  T[hint_cmd2]="Clearing a latched emergency is separate: the latch exists because"
+  T[hint_cmd3]="something went wrong, and the sane place to judge it safe is next to"
+  T[hint_cmd4]="the machine. Say no unless you are sure."
+  T[q_emergency]="  Allow clearing an emergency remotely? [y/N]: "
+  T[sec_topics]="4. Topics"
   T[q_prefix]="  Topic prefix"
   T[q_interval]="  Minimum seconds between updates"
   T[from_env]="(from environment)"
@@ -174,7 +180,13 @@ lang_fr() {
   T[q_mqtt_port]="  Port du broker"
   T[q_mqtt_user]="  Nom d'utilisateur MQTT"
   T[q_mqtt_pass]="  Mot de passe MQTT (masqué) : "
-  T[sec_topics]="3. Les topics"
+  T[sec_cmd]="3. Les commandes"
+  T[hint_cmd1]="Démarrer, pause et retour base pourront être pilotés depuis Home Assistant."
+  T[hint_cmd2]="L'acquittement d'urgence est à part : le verrou existe parce que quelque"
+  T[hint_cmd3]="chose a mal tourné, et le bon endroit pour juger que c'est sûr, c'est à"
+  T[hint_cmd4]="côté de la machine. Répondez non en cas de doute."
+  T[q_emergency]="  Autoriser l'acquittement d'urgence à distance ? [o/N] : "
+  T[sec_topics]="4. Les topics"
   T[q_prefix]="  Préfixe des topics"
   T[q_interval]="  Secondes minimum entre deux envois"
   T[from_env]="(depuis l'environnement)"
@@ -544,6 +556,20 @@ PY
     done
   fi
 
+  head_ "$(t sec_cmd)"
+  say "${c_dim}$(t hint_cmd1)${c_off}"
+  say "${c_dim}$(t hint_cmd2)${c_off}"
+  say "${c_dim}$(t hint_cmd3)${c_off}"
+  say "${c_dim}$(t hint_cmd4)${c_off}"
+  if [[ -n "${ALLOW_EMERGENCY_RESET:-}" ]]; then
+    say "$(t q_emergency)${ALLOW_EMERGENCY_RESET} ${c_dim}$(t from_env)${c_off}"
+  else
+    reply=""
+    if read -r -p "$(t q_emergency)" reply; then :; else reply=""; fi
+    if [[ "$reply" =~ ^[YyOo] ]]; then ALLOW_EMERGENCY_RESET="true"; else ALLOW_EMERGENCY_RESET="false"; fi
+  fi
+  ALLOW_COMMANDS="${ALLOW_COMMANDS:-true}"
+
   head_ "$(t sec_topics)"
   ask TOPIC_PREFIX "$(t q_prefix)" "mowgli"
   ask MIN_PUBLISH_INTERVAL "$(t q_interval)" "2.0"
@@ -592,6 +618,11 @@ MQTT_CLIENT_ID=${SERVICE_NAME}
 
 TOPIC_PREFIX=${TOPIC_PREFIX}
 MIN_PUBLISH_INTERVAL=${MIN_PUBLISH_INTERVAL}
+
+# Accept start / pause / dock on <prefix>/command.
+ALLOW_COMMANDS=${ALLOW_COMMANDS}
+# Allow <prefix>/command to clear a latched emergency. Off unless you said yes.
+ALLOW_EMERGENCY_RESET=${ALLOW_EMERGENCY_RESET}
 EOF
   chown root:root "$CONF_PATH"
   chmod 0600 "$CONF_PATH"
