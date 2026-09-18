@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# mowgli-ha-bridge installer
+# mowglinext-ha-bridge installer
 #
 # Installs a small systemd service that mirrors a MowgliNext robot's live state
 # onto an MQTT broker, so Home Assistant can read it. Nothing on the robot is
@@ -15,11 +15,11 @@
 #
 set -euo pipefail
 
-SERVICE_NAME="mowgli-ha-bridge"
+SERVICE_NAME="mowglinext-ha-bridge"
 BIN_PATH="/usr/local/bin/${SERVICE_NAME}"
 CONF_PATH="/etc/${SERVICE_NAME}.conf"
 UNIT_PATH="/etc/systemd/system/${SERVICE_NAME}.service"
-SRC_NAME="mowgli_ha_bridge.py"
+SRC_NAME="mowglinext_ha_bridge.py"
 RAW_URL="https://raw.githubusercontent.com/__OWNER__/__REPO__/main/${SRC_NAME}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -49,7 +49,7 @@ fi
 
 command -v python3 >/dev/null || { err "python3 is required but not installed."; exit 1; }
 
-head_ "mowgli-ha-bridge — installation"
+head_ "mowglinext-ha-bridge — installation"
 say "This publishes your robot's state to MQTT so Home Assistant can read it."
 say "${c_dim}It does not change anything on the robot itself.${c_off}"
 
@@ -109,7 +109,7 @@ fi
 
 umask 077
 cat > "$CONF_PATH" <<EOF
-# mowgli-ha-bridge configuration — written by install.sh
+# mowglinext-ha-bridge configuration — written by install.sh
 # This file contains a password: keep it readable by root only.
 
 ROBOT_HOST=${ROBOT_HOST}
@@ -119,7 +119,7 @@ MQTT_HOST=${MQTT_HOST}
 MQTT_PORT=${MQTT_PORT}
 MQTT_USERNAME=${MQTT_USERNAME}
 MQTT_PASSWORD=${MQTT_PASSWORD}
-MQTT_CLIENT_ID=mowgli-ha-bridge
+MQTT_CLIENT_ID=mowglinext-ha-bridge
 
 TOPIC_PREFIX=${TOPIC_PREFIX}
 MIN_PUBLISH_INTERVAL=${MIN_PUBLISH_INTERVAL}

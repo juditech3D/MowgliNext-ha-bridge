@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-mowgli-ha-bridge — publish a MowgliNext robot's live state to an MQTT broker.
+mowglinext-ha-bridge — publish a MowgliNext robot's live state to an MQTT broker.
 
 Why this exists
 ---------------
@@ -58,7 +58,7 @@ DEFAULTS = {
     "MQTT_PORT": "1883",
     "MQTT_USERNAME": "",
     "MQTT_PASSWORD": "",
-    "MQTT_CLIENT_ID": "mowgli-ha-bridge",
+    "MQTT_CLIENT_ID": "mowglinext-ha-bridge",
     "TOPIC_PREFIX": "mowgli",
     # Seconds between two publishes of the same topic. The robot streams far
     # faster than Home Assistant needs; without this the recorder database
@@ -342,7 +342,7 @@ def topic_worker(ros_topic, mqtt_suffix, cfg, state):
 # Main
 # ---------------------------------------------------------------------------
 def main():
-    config_path = sys.argv[1] if len(sys.argv) > 1 else "/etc/mowgli-ha-bridge.conf"
+    config_path = sys.argv[1] if len(sys.argv) > 1 else "/etc/mowglinext-ha-bridge.conf"
     cfg = load_config(config_path)
     availability = f"{cfg['TOPIC_PREFIX']}/available"
 
@@ -380,7 +380,7 @@ def main():
 
     state["publish"] = publish
 
-    log("INFO", f"mowgli-ha-bridge starting — robot {cfg['ROBOT_HOST']}:{cfg['ROBOT_PORT']}, "
+    log("INFO", f"mowglinext-ha-bridge starting — robot {cfg['ROBOT_HOST']}:{cfg['ROBOT_PORT']}, "
                 f"broker {cfg['MQTT_HOST']}:{cfg['MQTT_PORT']}, prefix '{cfg['TOPIC_PREFIX']}'")
 
     threads = []

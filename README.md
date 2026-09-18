@@ -1,4 +1,4 @@
-# mowgli-ha-bridge
+# mowglinext-ha-bridge
 
 Publish a **MowgliNext** robot mower's live state to MQTT, so **Home Assistant**
 can read it — without modifying the robot.
@@ -87,7 +87,7 @@ sudo ./install.sh
 
 The installer asks for the robot address, the broker address and port, and the
 **MQTT username and password**. The password is typed hidden and written only
-to `/etc/mowgli-ha-bridge.conf`, `chmod 0600`, root-owned. It is never echoed
+to `/etc/mowglinext-ha-bridge.conf`, `chmod 0600`, root-owned. It is never echoed
 and never leaves the machine.
 
 Then it installs a systemd service, starts it and shows the first log lines.
@@ -123,10 +123,10 @@ Two of the entities are worth knowing about:
 ## Managing the service
 
 ```bash
-sudo journalctl -u mowgli-ha-bridge -f        # follow the log
-sudo systemctl restart mowgli-ha-bridge       # restart
-sudo nano /etc/mowgli-ha-bridge.conf          # reconfigure, then restart
-sudo ./install.sh --uninstall                 # remove (keeps the config file)
+sudo journalctl -u mowglinext-ha-bridge -f        # follow the log
+sudo systemctl restart mowglinext-ha-bridge       # restart
+sudo nano /etc/mowglinext-ha-bridge.conf          # reconfigure, then restart
+sudo ./install.sh --uninstall                     # remove (keeps the config file)
 ```
 
 ## Configuration reference
@@ -138,7 +138,7 @@ sudo ./install.sh --uninstall                 # remove (keeps the config file)
 | `MQTT_HOST` | — | Broker address (required) |
 | `MQTT_PORT` | `1883` | Broker port |
 | `MQTT_USERNAME` / `MQTT_PASSWORD` | — | Broker credentials, empty for anonymous |
-| `MQTT_CLIENT_ID` | `mowgli-ha-bridge` | Client id seen by the broker |
+| `MQTT_CLIENT_ID` | `mowglinext-ha-bridge` | Client id seen by the broker |
 | `TOPIC_PREFIX` | `mowgli` | Prefix for every topic |
 | `MIN_PUBLISH_INTERVAL` | `2.0` | Minimum seconds between two publishes of the same topic |
 
