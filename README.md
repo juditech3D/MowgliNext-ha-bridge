@@ -1,5 +1,7 @@
 # mowglinext-ha-bridge
 
+**English** · [Français](README.fr.md)
+
 Publish a **MowgliNext** robot mower's live state to MQTT, so **Home Assistant**
 can read it — without modifying the robot.
 
