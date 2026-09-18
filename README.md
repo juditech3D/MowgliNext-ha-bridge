@@ -124,7 +124,19 @@ The installer asks for the robot address, the broker address and port, and the
 to `/etc/mowglinext-ha-bridge.conf`, `chmod 0600`, root-owned. It is never echoed
 and never leaves the machine.
 
+It looks for your broker rather than expecting you to recite an IP address: it
+resolves the name Home Assistant advertises over mDNS, and failing that sweeps
+the local `/24` for a host answering on both 8123 and 1883. Whatever it finds
+is offered as the default — press Enter to accept, or type your own.
+
+```
+Looking for a Home Assistant MQTT broker...
+✓ Found Home Assistant with MQTT at 192.168.1.239
+  Broker address [192.168.1.239]:
+```
+
 Then it installs a systemd service, starts it and shows the first log lines.
+The service runs unprivileged — see [Security](#security).
 
 ### Creating the MQTT account in Home Assistant
 
@@ -132,6 +144,80 @@ The Mosquitto add-on authenticates against Home Assistant users. **Settings →
 People → Users → Add**, create a user (for example `mowgli`), and give those
 credentials to the installer. A `not authorised` line in the log almost always
 means this step was skipped.
+
+## Security
+
+### What `curl … | sudo bash` really means
+
+It means running, as root, whatever that URL returns *at that moment*, without
+seeing it first. That is a real risk and it is worth stating plainly rather
+than hiding behind a convenient one-liner.
+
+Concretely, for this project:
+
+- **Everything rests on the GitHub repository.** Whoever controls it controls
+  what runs as root on your Pi. Today that is its owner — and anyone who
+  compromises that account.
+- **There is no signature or checksum.** A checksum published in the same
+  repository would only catch a truncated download, not a repository that has
+  been tampered with, so it would buy you little and might suggest a guarantee
+  that is not there.
+- **The installer fetches twice** — itself, then the bridge — leaving a
+  theoretical window in which the two could differ.
+
+Two ways to remove the doubt entirely:
+
+```bash
+# Read it before running it as root
+curl -fsSL https://raw.githubusercontent.com/juditech3D/MowgliNext-ha-bridge/main/install.sh -o install.sh
+less install.sh && sudo bash install.sh
+```
+
+```bash
+# Or pin to a specific commit: immutable, reviewable, reproducible
+curl -fsSL https://raw.githubusercontent.com/juditech3D/MowgliNext-ha-bridge/<commit-sha>/install.sh | sudo bash
+```
+
+The whole thing is about 400 lines of Python and shell, deliberately kept
+readable so that reviewing it is realistic rather than notional.
+
+### What the code actually does
+
+- **No dynamic execution.** No `eval`, no `exec`, no `subprocess`, no
+  `pickle`, no shelling out. Incoming MQTT and WebSocket data is parsed with
+  `json.loads` and never interpreted.
+- **Two outbound connections**, both from `socket.create_connection`: your
+  robot, and your broker. Nothing else. No telemetry, no phoning home.
+- **Three files written**, all named in the source: the program, the config,
+  the systemd unit. Uninstalling removes exactly those.
+- **Read-only towards the robot.** It subscribes to the WebSocket API; there
+  is no code path that sends the robot a command.
+
+### The service does not run as root
+
+The installer needs root — it writes to `/usr/local/bin` and
+`/etc/systemd/system`. The **service** does not, and therefore does not get it:
+
+```ini
+DynamicUser=yes
+LoadCredential=conf:/etc/mowglinext-ha-bridge.conf
+ExecStart=/usr/local/bin/mowglinext-ha-bridge %d/conf
+```
+
+`DynamicUser` gives it a throwaway unprivileged account for the lifetime of the
+service — nothing to create, nothing left behind. The config file stays
+root-owned `0600`; systemd reads it while still privileged and passes it as a
+credential the service user can read. So the broker password is never in a file
+the service account could open on its own.
+
+On top of that the unit drops all capabilities and denies everything it does
+not need: `ProtectSystem=strict`, `PrivateDevices`, `ProtectKernelTunables`,
+`RestrictAddressFamilies=AF_INET AF_INET6`,
+`SystemCallFilter=@system-service`, and the rest. A compromised bridge would
+be an unprivileged process that can open TCP sockets and little else.
+
+`LoadCredential` needs systemd 247+. On older systems the installer says so and
+falls back to running as root, rather than shipping a unit that will not start.
 
 ## Home Assistant entities
 

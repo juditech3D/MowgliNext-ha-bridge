@@ -239,7 +239,74 @@ ask ROBOT_PORT "  Robot web UI port" "4006"
 head_ "2. The MQTT broker"
 say "${c_dim}For Home Assistant this is the machine running the Mosquitto add-on,${c_off}"
 say "${c_dim}and the account is a normal Home Assistant user you created for it.${c_off}"
-ask MQTT_HOST "  Broker address" ""
+
+# Try to find it rather than making the user recite an IP address from memory.
+# Two passes: the name Home Assistant advertises over mDNS, then a sweep of the
+# local /24 for a host serving both the HA web UI and MQTT. Purely a suggestion
+# — whatever is found is offered as a default and can be overridden.
+DETECTED_BROKER=""
+if [[ -z "${MQTT_HOST:-}" ]]; then
+  say ""
+  say "Looking for a Home Assistant MQTT broker..."
+  DETECTED_BROKER="$(timeout 25 python3 - <<'PY' 2>/dev/null || true
+import socket, sys, ipaddress
+import concurrent.futures as cf
+
+def is_open(host, port, t=0.4):
+    try:
+        s = socket.create_connection((host, port), timeout=t)
+        s.close()
+        return True
+    except Exception:
+        return False
+
+# 1. The name Home Assistant publishes over mDNS.
+for name in ("homeassistant.local", "homeassistant", "hassio.local"):
+    try:
+        ip = socket.gethostbyname(name)
+    except Exception:
+        continue
+    if is_open(ip, 1883):
+        print(ip)
+        sys.exit(0)
+
+# 2. Sweep the local /24 for a host that answers on both 8123 and 1883.
+#    A UDP "connect" to a TEST-NET address sends nothing; it just reveals
+#    which local interface would be used.
+probe = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+try:
+    probe.connect(("192.0.2.1", 9))
+    local = probe.getsockname()[0]
+finally:
+    probe.close()
+
+hosts = [str(h) for h in ipaddress.ip_network(local + "/24", strict=False).hosts()]
+candidates = []
+with cf.ThreadPoolExecutor(128) as pool:
+    futures = {pool.submit(is_open, h, 8123): h for h in hosts}
+    for fut in cf.as_completed(futures):
+        try:
+            if fut.result():
+                candidates.append(futures[fut])
+        except Exception:
+            pass
+
+for host in sorted(candidates):
+    if is_open(host, 1883):
+        print(host)
+        sys.exit(0)
+
+sys.exit(1)
+PY
+)"
+  if [[ -n "$DETECTED_BROKER" ]]; then
+    ok "Found Home Assistant with MQTT at ${DETECTED_BROKER}"
+  else
+    say "${c_dim}None found — you will need the address of your broker.${c_off}"
+  fi
+fi
+
+ask MQTT_HOST "  Broker address" "$DETECTED_BROKER"
 ask MQTT_PORT "  Broker port" "1883"
 ask MQTT_USERNAME "  MQTT username" ""
 
@@ -299,6 +366,21 @@ chmod 0600 "$CONF_PATH"
 ok "Wrote ${CONF_PATH} (mode 0600, root only)"
 fi
 
+# Running unprivileged relies on DynamicUser (systemd 232+) handing the config
+# over as a credential (systemd 247+). On anything older, fall back to the
+# plain form rather than shipping a unit that will not start.
+SYSTEMD_VER="$(systemctl --version 2>/dev/null | head -1 | grep -oE '[0-9]+' | head -1 || true)"
+if [[ "$SYSTEMD_VER" =~ ^[0-9]+$ ]] && (( SYSTEMD_VER >= 247 )); then
+  SERVICE_IDENTITY="DynamicUser=yes
+LoadCredential=conf:${CONF_PATH}
+ExecStart=${BIN_PATH} %d/conf"
+  ok "Service will run unprivileged (systemd ${SYSTEMD_VER})"
+else
+  SERVICE_IDENTITY="User=root
+ExecStart=${BIN_PATH} ${CONF_PATH}"
+  say "${c_dim}systemd ${SYSTEMD_VER:-unknown} is too old for credentials — running as root.${c_off}"
+fi
+
 cat > "$UNIT_PATH" <<EOF
 [Unit]
 Description=MowgliNext to MQTT bridge for Home Assistant
@@ -308,17 +390,39 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-ExecStart=${BIN_PATH} ${CONF_PATH}
 Restart=always
 RestartSec=10
-User=root
 
-# The bridge only needs the network and its own config file.
+# The bridge needs two things: outbound TCP, and its configuration. It never
+# needs to be root, so it isn't. DynamicUser gives it a throwaway unprivileged
+# account for the lifetime of the service — nothing to create, nothing left
+# behind. The config stays root-owned 0600 on disk; systemd reads it while
+# still privileged and hands it over as a credential the service user can read.
+${SERVICE_IDENTITY}
+
+# It opens sockets and reads one file. Everything else is denied.
+CapabilityBoundingSet=
+AmbientCapabilities=
 NoNewPrivileges=true
 PrivateTmp=true
+PrivateDevices=true
 ProtectSystem=strict
 ProtectHome=true
-ReadOnlyPaths=${CONF_PATH}
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+ProtectProc=invisible
+RestrictAddressFamilies=AF_INET AF_INET6
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
 
 [Install]
 WantedBy=multi-user.target
